@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Huma Kaza - Detaylı Analiz</title>
+    <style>
+        :root { --primary: #00adb5; --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --accent: #00ffd4; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); color: var(--text); display: flex; justify-content: center; padding: 20px; }
+        .container { background-color: var(--card); padding: 20px; border-radius: 15px; width: 100%; max-width: 700px; border: 1px solid #333; }
+        h2 { text-align: center; color: var(--primary); text-transform: uppercase; margin-bottom: 20px; }
+        .section { background: #252525; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #333; }
+        
+        /* Analiz Kutuları */
+        .analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .analysis-box { background: #0f1a1a; border-left: 3px solid var(--primary); padding: 10px; border-radius: 6px; color: var(--accent); font-size: 0.85em; line-height: 1.4; }
+        .full-width { grid-column: 1 / -1; border-left-color: #ff9800; background: #1a160f; }
+
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; }
+        .stat-card { background: #2d2d2d; padding: 10px; border-radius: 8px; text-align: center; border-bottom: 2px solid var(--primary); }
+        .stat-card h4 { margin: 0; font-size: 0.75em; color: #888; }
+        .stat-card p { margin: 5px 0; font-size: 1em; font-weight: bold; }
+        
+        .progress-bar { height: 4px; background: #111; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: 0.5s; }
+        
+        .btn-add { background: var(--primary); color: white; width: 100%; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        input, select { background: #333; color: white; border: 1px solid #444; padding: 10px; border-radius: 8px; }
+        .footer-btns { display: flex; gap: 5px; margin-top: 10px; }
+        .btn-json { background: #444; color: #eee; font-size: 0.75em; flex: 1; padding: 8px; border-radius: 5px; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Huma Kaza Takip v3.0</h2>
+
+    <div class="section">
+        <h3 style="font-size:0.9em; color:#888; margin-bottom:10px;">📊 Performans ve Tahmini Bitişler</h3>
+        <div class="analysis-grid" id="analizGrid">
+            </div>
+    </div>
+
+    <div class="section">
+        <div id="stats" class="stat-grid"></div>
+    </div>
+
+    <div class="section">
+        <div style="display: flex; gap: 10px;">
+            <select id="vakit" style="flex: 2;">
+                <option value="Sabah">Sabah</option><option value="Öğle">Öğle</option>
+                <option value="İkindi">İkindi</option><option value="Akşam">Akşam</option>
+                <option value="Yatsı">Yatsı</option><option value="Vitir">Vitir</option>
+            </select>
+            <input type="number" id="miktar" value="1" min="1" style="flex: 1;">
+        </div>
+        <button class="btn-add" onclick="ekle()">Kazayı İşle ve Veriyi Güncelle</button>
+    </div>
+
+    <div class="footer-btns">
+        <button class="btn-json" onclick="jsonIndir()">💾 Yedeği Kaydet</button>
+        <button class="btn-json" onclick="document.getElementById('jsonYukle').click()">📂 Yedeği Yükle</button>
+        <input type="file" id="jsonYukle" accept=".json" style="display:none" onchange="jsonOku(event)">
+    </div>
+</div>
+
+<script>
+    const HEDEF = 2200;
+    let data = JSON.parse(localStorage.getItem('humaKazaDeposu')) || {
+        kayitlar: { Sabah: 0, Öğle: 0, İkindi: 0, Akşam: 0, Yatsı: 0, Vitir: 0 },
+        baslangicTarihi: new Date().getTime()
+    };
+
+    function arayuzGuncelle() {
+        const statsDiv = document.getElementById('stats');
+        const analizGrid = document.getElementById('analizGrid');
+        statsDiv.innerHTML = '';
+        analizGrid.innerHTML = '';
+        
+        let toplamKilinan = 0;
+        const simdi = new Date().getTime();
+        const gecenGun = Math.max(Math.ceil((simdi - data.baslangicTarihi) / 86400000), 1);
+
+        // 1. Kartları Oluştur ve Toplamı Hesapla
+        for (let v in data.kayitlar) {
+            let k = data.kayitlar[v];
+            toplamKilinan += k;
+            let p = Math.min((k / HEDEF) * 100, 100);
+            statsDiv.innerHTML += `
+                <div class="stat-card">
+                    <h4>${v}</h4>
+                    <p>${k}/${HEDEF}</p>
+                    <div class="progress-bar"><div class="progress-fill" style="width:${p}%"></div></div>
+                </div>`;
+            
+            // 2. Her Vakit İçin Ayrı Analiz Kutusu
+            let vakitHiz = k / gecenGun;
+            let vakitAnalizHTML = `<div class="analysis-box"><strong>${v}:</strong><br>`;
+            
+            if (k > 0 && vakitHiz > 0) {
+                let vakitKalanGun = Math.ceil((HEDEF - k) / vakitHiz);
+                let vakitBitis = new Date(); vakitBitis.setDate(vakitBitis.getDate() + vakitKalanGun);
+                vakitAnalizHTML += `Hız: ${vakitHiz.toFixed(2)}/gün<br>Bitiş: ${vakitBitis.toLocaleDateString('tr-TR')}`;
+            } else {
+                vakitAnalizHTML += `Veri bekleniyor...`;
+            }
+            vakitAnalizHTML += `</div>`;
+            analizGrid.innerHTML += vakitAnalizHTML;
+        }
+
+        // 3. Genel Toplam Analiz (En Üste)
+        let genelHiz = (toplamKilinan / 6) / gecenGun;
+        let genelKalanGun = 0;
+        let genelBitisStr = "Hesaplanıyor...";
+        
+        if (toplamKilinan > 0) {
+            genelKalanGun = Math.ceil(((HEDEF * 6) - toplamKilinan) / (toplamKilinan / gecenGun));
+            let genelBitis = new Date(); genelBitis.setDate(genelBitis.getDate() + genelKalanGun);
+            genelBitisStr = genelBitis.toLocaleDateString('tr-TR');
+        }
+
+        analizGrid.insertAdjacentHTML('afterbegin', `
+            <div class="analysis-box full-width">
+                <strong>🌍 GENEL DURUM:</strong><br>
+                Ortalama Hız: <b>${genelHiz.toFixed(2)}</b> tam gün/gün | 
+                Kalan: <b>${genelKalanGun}</b> gün | 
+                Tahmini Bitiş: <b>${genelBitisStr}</b>
+            </div>
+        `);
+
+        localStorage.setItem('humaKazaDeposu', JSON.stringify(data));
+    }
+
+    function ekle() {
+        const v = document.getElementById('vakit').value;
+        const m = parseInt(document.getElementById('miktar').value);
+        if (m > 0) { data.kayitlar[v] += m; arayuzGuncelle(); }
+    }
+
+    function jsonIndir() {
+        const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `huma_kaza_v3_${new Date().toLocaleDateString()}.json`;
+        a.click();
+    }
+
+    function jsonOku(e) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                data = JSON.parse(ev.target.result);
+                arayuzGuncelle();
+                alert("Yedek başarıyla yüklendi!");
+            } catch(err) { alert("Hatalı dosya!"); }
+        };
+        reader.readAsText(e.target.files[0]);
+    }
+
+    arayuzGuncelle();
+</script>
+</body>
+</html>
